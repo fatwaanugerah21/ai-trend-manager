@@ -6,7 +6,7 @@ import fastifyWebsocket from "@fastify/websocket";
 import { FastifyInstance } from "fastify";
 import TrendSubscriberRoute from "./routes/trend-subscribers.route";
 
-type TWSReceivedMsgType = "add-subscriber" | "update-subscriber" | "change-subscriber-last-trend-sent";
+type TWSReceivedMsgType = "add-subscriber" | "update-subscriber" | "change-subscriber-last-trend-sent" | "disable-subscriber";
 export interface IWSReceivedMsg {
   type: TWSReceivedMsgType;
   data: any;

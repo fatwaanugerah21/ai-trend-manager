@@ -1,5 +1,8 @@
 import DatabaseService from "@/services/database.service";
+import ExchangeService from "@/services/exchange-service/exchange-service";
+import GrokAiService from "@/services/grok-ai.service";
 import eventBus from "@/utils/event-bus.util";
+import { generateImageOfCandles } from "@/utils/image-generator.util";
 import { breakOutTrend } from "db/schema";
 import { and, eq } from "drizzle-orm";
 
@@ -129,6 +132,28 @@ startDate: ${candlesData.candlesStartDate}
       }).join("\n");
     }).join("\n");
     console.log("All trend subscribers by symbol and rollWindowInHours:\n" + allSubsLog);
+  }
+
+  static async getCandlesData(symbol: string, candlesEndDate: Date, rollWindowInHours: number): Promise<ICandlesData> {
+    console.log(`Getting candles data for ${symbol}-${candlesEndDate}-${rollWindowInHours}H...`);
+
+    const candlesStartDate = new Date(candlesEndDate.getTime() - (rollWindowInHours * 60 * 60 * 1000));
+    const candles = await ExchangeService.getCandles(symbol, candlesStartDate, candlesEndDate, "1Min");
+
+    const closePrice = candles[candles.length - 1]?.closePrice;
+    const candlesImage = await generateImageOfCandles(symbol, candles);
+    const candlesTrend = await GrokAiService.analyzeBreakOutTrend(candlesImage);
+
+    return { candlesStartDate, candlesEndDate, candlesImage, candlesTrend, closePrice };
+  }
+
+  static getMinutesPassedAndCheckIntervalElapsed(subscriber: ISubscriberDetail): number {
+    const now = new Date();
+    now.setSeconds(0, 0);
+    const lastTrendSent = subscriber.lastTrendSent;
+    const minutesPassed = Math.floor((now.getTime() - lastTrendSent.getTime()) / (60_000));
+
+    return Math.max(subscriber.checkIntervalInMinutes - minutesPassed, 0);
   }
 }
 

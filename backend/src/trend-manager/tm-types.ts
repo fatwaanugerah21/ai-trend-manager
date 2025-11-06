@@ -1,3 +1,6 @@
+interface IPostResponse { isSuccess: boolean, msg?: string };
+
+
 interface ITMAddSubsriberParams {
   identifier: string;
   symbol: string;

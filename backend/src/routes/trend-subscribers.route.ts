@@ -5,28 +5,7 @@ import { WebSocket } from "@fastify/websocket";
 import { FastifyInstance } from "fastify";
 import joi from "joi"
 
-interface IWSRecvSubscribeTrendData {
-  identifier: string;
-  symbol: string;
-  rollWindowInHours: number;
-  checkIntervalInMinutes: number;
-}
 
-interface IWSRecvUpdateSubscriberData {
-  identifier: string;
-  symbol: string;
-  rollWindowInHours: number;
-  newSymbol: string;
-  newRollWindowInHours: number;
-  checkIntervalInMinutes: number;
-}
-
-interface IWSRecvChangeSubscriberLastTrendSentData {
-  identifier: string;
-  symbol: string;
-  rollWindowInHours: number;
-  lastTrendSent: Date;
-}
 
 class TrendSubscriberRoute {
   static registerHttpRoutes(app: FastifyInstance) {
@@ -36,9 +15,9 @@ class TrendSubscriberRoute {
   static async handleWsMsg(connection: WebSocket, msg: IWSReceivedMsg) {
     try {
       if (msg.type === "add-subscriber") {
-        const data = msg.data as IWSRecvSubscribeTrendData;
+        const data = msg.data as IAddSubscriberSchema;
         console.log("New trend subscriber: ", data);
-        const schema = joi.object<IWSRecvSubscribeTrendData>({
+        const schema = joi.object<IAddSubscriberSchema>({
           checkIntervalInMinutes: joi.number().required(),
           rollWindowInHours: joi.number().required(),
           identifier: joi.string().required(),
@@ -60,10 +39,10 @@ class TrendSubscriberRoute {
       }
 
       if (msg.type === "update-subscriber") {
-        const data = msg.data as IWSRecvUpdateSubscriberData;
+        const data = msg.data as IUpdateSubscriberSchema;
         console.log("Update trend subscriber: ", data);
 
-        const schema = joi.object<IWSRecvUpdateSubscriberData>({
+        const schema = joi.object<IUpdateSubscriberSchema>({
           identifier: joi.string().required(),
           checkIntervalInMinutes: joi.number().required(),
           rollWindowInHours: joi.number().required(),
@@ -74,7 +53,7 @@ class TrendSubscriberRoute {
         const { error } = schema.validate(data);
         if (!!error) throw error.message;
 
-        const response = await TrendManager.updateSubscriber(connection, {
+        const response = await TrendManager.updateSubscriber({
           identifier: data.identifier,
           oldSymbol: data.symbol,
           newSymbol: data.newSymbol || data.symbol,
@@ -96,10 +75,10 @@ class TrendSubscriberRoute {
       }
 
       if (msg.type === "change-subscriber-last-trend-sent") {
-        const data = msg.data as IWSRecvChangeSubscriberLastTrendSentData;
+        const data = msg.data as IChangeSubscriberLastTrendSentSchema;
         console.log("Update trend subscriber: ", data);
 
-        const schema = joi.object<IWSRecvChangeSubscriberLastTrendSentData>({
+        const schema = joi.object<IChangeSubscriberLastTrendSentSchema>({
           identifier: joi.string().required(),
           rollWindowInHours: joi.number().required(),
           symbol: joi.string().required(),
@@ -108,12 +87,33 @@ class TrendSubscriberRoute {
         const { error } = schema.validate(data);
         if (!!error) throw error.message;
 
-        const response = await TrendManager.changeSubscriberLastTrendSent(connection, {
+        const response = await TrendManager.changeSubscriberLastTrendSent({
           identifier: data.identifier,
           symbol: data.symbol,
           rollWindowInHours: data.rollWindowInHours,
           newLastSent: data.lastTrendSent
         });
+
+        connection.send(JSON.stringify({
+          type: `${msg.type}-response`,
+          data: response,
+        }))
+      }
+
+      if (msg.type === "disable-subscriber") {
+        const data = msg.data as IDisableSubscriberSchema;
+        console.log("Update trend subscriber: ", data);
+
+        const schema = joi.object<IDisableSubscriberSchema>({
+          identifier: joi.string().required(),
+          rollWindowInHours: joi.number().required(),
+          symbol: joi.string().required(),
+          shouldDelete: joi.boolean().required(),
+        });
+        const { error } = schema.validate(data);
+        if (!!error) throw error.message;
+
+        const response = await TrendManager.disableSubscriber(data.symbol, data.rollWindowInHours, data.identifier, data.shouldDelete);
 
         connection.send(JSON.stringify({
           type: `${msg.type}-response`,

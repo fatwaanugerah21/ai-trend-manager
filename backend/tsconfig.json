@@ -24,6 +24,7 @@
     // don't emit JS on TS errors /* === Useful Debug Options === */ 
     "pretty": true, 
     "noUnusedParameters": false, 
+    "noUnusedLocals": true,
     "noFallthroughCasesInSwitch": true,
     "downlevelIteration": true,
 
