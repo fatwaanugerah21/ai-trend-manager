@@ -1,0 +1,37 @@
+{
+  "name": "ai-trend-agent-backend",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "module": "index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsx watch index.ts",
+    "start": "npm run build && npm run start:prod",
+    "build": "npx tsc && npx tsc-alias -p tsconfig.json && node fix-imports.js",
+    "start:prod": "node dist/index.js",
+    "drizzle-db-pull": "drizzle-kit introspect --config=drizzle-kit.config.ts"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/websocket": "^11.2.0",
+    "canvas": "^3.2.0",
+    "chartjs-plugin-annotation": "^3.1.0",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.44.7",
+    "fastify": "^5.6.1",
+    "joi": "^18.0.1",
+    "mysql2": "^3.15.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "drizzle-kit": "^0.31.6",
+    "tsc-alias": "^1.8.16",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

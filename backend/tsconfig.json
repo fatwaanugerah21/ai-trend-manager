@@ -1,0 +1,41 @@
+{
+  "compilerOptions": {
+    "outDir": "dist", 
+    "sourceMap": true,
+    "lib": ["ES2020", "DOM"],
+    "target": "es2020",
+    "types": ["node"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true, 
+    "forceConsistentCasingInFileNames": true, 
+    "skipLibCheck": true, 
+
+    /* === Interop / Imports === */ 
+    "esModuleInterop": true, 
+    "resolveJsonModule": true, 
+    "allowSyntheticDefaultImports": true, 
+    // makes CJS imports easier /* === Project Behavior === */ 
+    "incremental": true, 
+    // faster subsequent builds 
+    "noEmitOnError": true, 
+    // don't emit JS on TS errors /* === Useful Debug Options === */ 
+    "pretty": true, 
+    "noUnusedParameters": false, 
+    "noFallthroughCasesInSwitch": true,
+    "downlevelIteration": true,
+
+    // Add paths mapping "baseUrl": ".", 
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"] 
+    },
+  },
+  "include": [
+    "index.ts",
+    "src/**/*"
+  ],
+  "exclude": ["node_modules", "dist"] 
+}
