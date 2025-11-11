@@ -104,18 +104,14 @@ startDate: ${candlesData.candlesStartDate}
   }
 
   static async getCandlesData(symbol: string, candlesEndDate: Date, rollWindowInHours: number): Promise<ICandlesData> {
-    console.log(`Getting candles data for ${symbol}-${candlesEndDate}-${rollWindowInHours}H...`);
-
     const candlesStartDate = new Date(candlesEndDate.getTime() - (rollWindowInHours * 60 * 60 * 1000));
-    // const candles = await ExchangeService.getCandles(symbol, candlesStartDate, candlesEndDate, "1Min");
+    const candles = await ExchangeService.getCandles(symbol, candlesStartDate, candlesEndDate, "1Min");
 
-    // const closePrice = candles[candles.length - 1]?.closePrice;
-    // const candlesImage = await generateImageOfCandles(symbol, candles);
-    // const candlesTrend = await GrokAiService.analyzeBreakOutTrend(candlesImage);
+    const closePrice = candles[candles.length - 1]?.closePrice;
+    const candlesImage = await generateImageOfCandles(symbol, candles);
+    const candlesTrend = await GrokAiService.analyzeBreakOutTrend(candlesImage);
 
-    // return { candlesStartDate, candlesEndDate, candlesImage, candlesTrend, closePrice };
-    // FIXME:
-    return { candlesStartDate, candlesEndDate, candlesImage: Buffer.from("asdca"), candlesTrend: "Down", closePrice: 2.43 };
+    return { candlesStartDate, candlesEndDate, candlesImage, candlesTrend, closePrice };
   }
 
   static getMinutesPassedAndCheckIntervalElapsed(subscriber: ISubscriberDetail): number {
