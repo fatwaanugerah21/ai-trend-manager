@@ -101,7 +101,11 @@ export default function Home() {
             <div className="text-center text-gray-500 text-lg">No subscribers found.</div>
           ) : (
             subscribers.map((sub) => (
-              <SubscriberCard key={sub.symbol + sub.identifier + sub.lastTrendSent} subscriber={sub} />
+              <SubscriberCard
+                key={sub.symbol + sub.identifier + sub.lastTrendSent}
+                subscriber={sub}
+                onUpdate={refreshSubscribers}
+              />
             ))
           )}
         </div>

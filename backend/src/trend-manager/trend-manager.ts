@@ -1,38 +1,70 @@
-import eventBus from "@/utils/event-bus.util";
 import { WebSocket } from "@fastify/websocket";
 import TMUtil from "./tm-util";
 
 class TrendManager {
-  private static subscribers: { [symbol: string]: { [rollWindowInHours: number]: ISubscriberDetail[] } } = {};
-  private static watchedTrend: { [symbol: string]: { [rollWindowInHours: number]: boolean } } = {};
+  private static subscribers: TSubscriberCollection = {};
+  private static watchedTrend: { [symbol: string]: { [rollWindowInHours: number]: { [checkIntervalInMinutes: number]: boolean } } } = {};
 
   // INTERNAL WORKER
   private static async _ensureWatcher(symbol: string, rollWindowInHours: number, checkIntervalInMinutes: number) {
     this.watchedTrend[symbol] ??= {};
+    this.watchedTrend[symbol][rollWindowInHours] ??= {};
 
-    if (!this.watchedTrend[symbol][rollWindowInHours]) {
-      this.watchedTrend[symbol][rollWindowInHours] = true;
+    if (!this.watchedTrend[symbol][rollWindowInHours][checkIntervalInMinutes]) {
+      this.watchedTrend[symbol][rollWindowInHours][checkIntervalInMinutes] = true;
 
-      this.watchTrends(symbol, rollWindowInHours).finally(() => {
-        this.watchedTrend[symbol][rollWindowInHours] = false;
+      this.watchTrends(symbol, rollWindowInHours, checkIntervalInMinutes).finally(() => {
+        this.watchedTrend[symbol][rollWindowInHours][checkIntervalInMinutes] = false;
       });
-    } else {
-      eventBus.emit("check-timer", checkIntervalInMinutes);
     }
   }
 
-  private static async watchTrends(symbol: string, rollWindowInHours: number) {
+  private static async watchTrends(symbol: string, rollWindowInHours: number, checkIntervalInMinutes: number) {
     console.log(`Watching trend for ${symbol}-${rollWindowInHours}...`);
 
+    let isWaitedForMinutesAligned = false;
+
+    // Ensure the loop aligns with the correct N-minute boundary,
+    // e.g., for every 3 minutes: 00:00, 00:03, 00:06, etc.
+    //       for every 2 minutes: 00:00, 00:02, 00:04, etc.
+    const now = new Date();
+    now.setSeconds(0, 0); // strip seconds/millis
+
+    let msToAlign = 0;
+    const minute = now.getMinutes();
+    const mod = minute % checkIntervalInMinutes;
+
+    console.log("Current time, minute: ", minute);
+    console.log("checkIntervalInMinutes: ", checkIntervalInMinutes);
+    console.log("mod: ", mod);
+    if (mod !== 0) {
+      // Next aligned minute mark
+      const minutesToAdd = checkIntervalInMinutes - mod;
+
+      now.setMinutes(minute + minutesToAdd);
+      msToAlign = now.getTime() - (new Date()).setSeconds(0, 0);
+
+      if (msToAlign > 0) {
+        console.log(`Waiting for ${msToAlign}ms to align trend watcher loop for ${symbol} ${rollWindowInHours}h/${checkIntervalInMinutes}min to minute ${now.getMinutes().toString().padStart(2, "0")}`);
+        await new Promise(resolve => setTimeout(resolve, msToAlign));
+        isWaitedForMinutesAligned = true;
+      }
+    }
+
+    // At this point, we're at a 0-aligned time, such as :00, :03, :06, etc.
+
     while (true) {
-      const subscribers = this.subscribers[symbol]?.[rollWindowInHours];
+      const subscribers = this.subscribers[symbol]?.[rollWindowInHours]?.[checkIntervalInMinutes];
       if (!subscribers || subscribers.filter(s => s.isListening).length === 0) {
         console.log("No more subscribers for this symbol and rollWindowInHours, stopping trend watcher");
         return;
       }
 
-      const closestNextCheckInMinutes = TMUtil.getSubscribersClosesNextCheckInMinutes(subscribers);
-      await TMUtil.waitForNextCheck(closestNextCheckInMinutes || 1);
+      if (isWaitedForMinutesAligned) {
+        isWaitedForMinutesAligned = false;
+      } else {
+        await TMUtil.waitForNextCheck(checkIntervalInMinutes || 1);
+      }
 
       const candlesEndDate = new Date();
       const candlesData = await TMUtil.getCandlesData(symbol, candlesEndDate, rollWindowInHours);
@@ -42,16 +74,9 @@ class TrendManager {
 
         if (sub.wsClient.readyState === sub.wsClient.CLOSED) {
           console.log(`${sub.identifier} wsClient is closed, but status is still listening, disabling it`);
-          this.disableSubscriber(symbol, rollWindowInHours, sub.identifier);
+          this.disableSubscriber(symbol, rollWindowInHours, checkIntervalInMinutes, sub.identifier);
           continue;
         }
-
-        const { checkIntervalInMinutes, lastTrendSent } = sub;
-
-        const elapsed = candlesEndDate.getTime() - lastTrendSent.getTime();
-        const intervalInMs = checkIntervalInMinutes * 60_000;
-
-        if (elapsed < intervalInMs) continue;
 
         TMUtil.sendTrendData(sub, candlesData);
         sub.lastTrendSent = new Date(candlesEndDate);
@@ -69,14 +94,17 @@ class TrendManager {
 
   static async addSubscriber(wsClient: WebSocket, params: ITMAddSubsriberParams): Promise<IPostResponse> {
     const { symbol, rollWindowInHours, checkIntervalInMinutes, identifier } = params;
+    console.log("params: ", params);
+
 
     const now = new Date();
     now.setSeconds(0, 0);
 
     this.subscribers[symbol] ??= {};
-    this.subscribers[symbol][rollWindowInHours] ??= [];
+    this.subscribers[symbol][rollWindowInHours] ??= {};
+    this.subscribers[symbol][rollWindowInHours][checkIntervalInMinutes] ??= [];
 
-    const subscribers = this.subscribers[symbol][rollWindowInHours];
+    const subscribers = this.subscribers[symbol][rollWindowInHours][checkIntervalInMinutes];
 
     let subscriber = subscribers.find((s) => s.identifier === identifier);
     if (subscriber) {
@@ -111,7 +139,7 @@ class TrendManager {
         checkIntervalInMinutes: checkIntervalInMinutes,
         isListening: true,
       };
-      this.subscribers[symbol][rollWindowInHours].push(subscriber);
+      this.subscribers[symbol][rollWindowInHours][checkIntervalInMinutes].push(subscriber);
 
       const candlesData = await TMUtil.getCandlesData(symbol, now, rollWindowInHours);
       TMUtil.sendTrendData(subscriber, candlesData);
@@ -129,10 +157,10 @@ class TrendManager {
     const now = new Date();
     now.setSeconds(0, 0);
 
-    const { oldSymbol, oldRollWindowInHours, newSymbol, newRollWindowInHours, checkIntervalInMinutes, identifier } = params;
+    const { oldSymbol, oldRollWindowInHours, newSymbol, newRollWindowInHours, oldCheckIntervalInMinutes, newCheckIntervalInMinutes, identifier } = params;
 
-    if (oldSymbol !== newSymbol || oldRollWindowInHours !== newRollWindowInHours) {
-      const deletedSubscriber = this.disableSubscriber(oldSymbol, oldRollWindowInHours, identifier, true);
+    if (oldSymbol !== newSymbol || oldRollWindowInHours !== newRollWindowInHours || oldCheckIntervalInMinutes !== newCheckIntervalInMinutes) {
+      const deletedSubscriber = this.disableSubscriber(oldSymbol, oldRollWindowInHours, oldCheckIntervalInMinutes, identifier, true);
       if (!deletedSubscriber) {
         console.log("Something went wrong while deleting the old subscriber data, old subscriber data not found");
         return { isSuccess: false, msg: "Old subscriber data not found" };
@@ -144,56 +172,30 @@ class TrendManager {
         symbol: newSymbol,
         rollWindowInHours: newRollWindowInHours,
         lastTrendSent: now,
-        checkIntervalInMinutes: checkIntervalInMinutes,
+        checkIntervalInMinutes: newCheckIntervalInMinutes,
         isListening: true,
       };
 
       this.subscribers[newSymbol] ??= {};
-      this.subscribers[newSymbol][newRollWindowInHours] ??= [];
-      this.subscribers[newSymbol][newRollWindowInHours].push(subscriber);
+      this.subscribers[newSymbol][newRollWindowInHours] ??= {};
+      this.subscribers[newSymbol][newRollWindowInHours][newCheckIntervalInMinutes] ??= [];
+      this.subscribers[newSymbol][newRollWindowInHours][newCheckIntervalInMinutes].push(subscriber);
 
       const candlesData = await TMUtil.getCandlesData(newSymbol, now, newRollWindowInHours);
       TMUtil.sendTrendData(subscriber, candlesData);
 
-      this._ensureWatcher(newSymbol, newRollWindowInHours, checkIntervalInMinutes);
-
-      return { isSuccess: true, msg: "Success" };
-    } else {
-      if (!this.subscribers[oldSymbol]) return { isSuccess: false, msg: "No subscribers found" };
-
-      const subscribers = this.subscribers[oldSymbol][oldRollWindowInHours];
-      if (!subscribers) return { isSuccess: false, msg: "No subscribers found for this roll window" };
-
-      const idx = subscribers.findIndex(s => s.identifier === identifier);
-      if (idx === -1) return { isSuccess: false, msg: "Subscriber with that identifier not found" };
-
-      const subscriber = subscribers[idx];
-      subscriber.checkIntervalInMinutes = checkIntervalInMinutes;
-
-      this._ensureWatcher(oldSymbol, oldRollWindowInHours, TMUtil.getMinutesPassedAndCheckIntervalElapsed(subscriber));
+      this._ensureWatcher(newSymbol, newRollWindowInHours, newCheckIntervalInMinutes);
 
       return { isSuccess: true, msg: "Success" };
     }
+
+    return { isSuccess: true, msg: "Nothing changed" }
   }
 
-  static async changeSubscriberLastTrendSent(params: ITMChangeSubsriberLastSentParams): Promise<IPostResponse> {
-    console.log("Changing subscriber last trend sent data: ", params);
-
-    const subscriber = this.subscribers[params.symbol]?.[params.rollWindowInHours]?.find(s => s.identifier === params.identifier);
-    if (!subscriber) return { isSuccess: false, msg: "Subscriber not found" };
-
-    subscriber.lastTrendSent = new Date(params.newLastSent);
-    subscriber.lastTrendSent.setSeconds(0, 0);
-
-    this._ensureWatcher(params.symbol, params.rollWindowInHours, TMUtil.getMinutesPassedAndCheckIntervalElapsed(subscriber));
-
-    return { isSuccess: true, msg: "Success update last trend sent" };
-  }
-
-  static disableSubscriber(symbol: string, rollWindowInHours: number, identifier: string, shouldDelete?: boolean): ISubscriberDetail | undefined {
+  static disableSubscriber(symbol: string, rollWindowInHours: number, checkIntervalInMinutes: number, identifier: string, shouldDelete?: boolean): ISubscriberDetail | undefined {
     if (!this.subscribers[symbol]) return undefined;
 
-    const subs = this.subscribers[symbol][rollWindowInHours];
+    const subs = this.subscribers[symbol][rollWindowInHours][checkIntervalInMinutes];
     if (!subs || !subs.length) return undefined;
 
     const idx = subs.findIndex(s => s.identifier === identifier);
@@ -207,7 +209,7 @@ class TrendManager {
     subscriber.removedAt = new Date();
 
     if (shouldDelete) {
-      this.subscribers[symbol][rollWindowInHours].splice(idx, 1);
+      this.subscribers[symbol][rollWindowInHours][checkIntervalInMinutes].splice(idx, 1);
     }
 
     console.log(`Subscriber disabled: ${identifier} at: ${subscriber.removedAt.toLocaleDateString()}`);

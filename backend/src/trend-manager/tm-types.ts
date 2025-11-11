@@ -1,5 +1,7 @@
 interface IPostResponse { isSuccess: boolean, msg?: string };
 
+type TSubscriberCollection = { [symbol: string]: { [rollWindowInHours: number]: { [checkIntervalInMinutes: number]: ISubscriberDetail[] } } };
+
 
 interface ITMAddSubsriberParams {
   identifier: string;
@@ -14,13 +16,15 @@ interface ITMUpdateSubsriberParams {
   oldRollWindowInHours: number;
   newSymbol: string;
   newRollWindowInHours: number;
-  checkIntervalInMinutes: number;
+  oldCheckIntervalInMinutes: number;
+  newCheckIntervalInMinutes: number;
 }
 
 interface ITMChangeSubsriberLastSentParams {
   identifier: string;
   symbol: string;
   rollWindowInHours: number;
+  checkIntervalInMinutes: number;
   newLastSent: Date;
 }
 

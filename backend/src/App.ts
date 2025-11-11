@@ -61,7 +61,10 @@ class App {
   }
 
   private async initializeMiddlewares() {
-    await this.app.register(fastifyCors, { origin: '*' });
+    await this.app.register(fastifyCors, {
+      origin: '*',
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    });
     await this.app.register(fastifyFormbody);
     await this.app.register(fastifyHelmet);
   }

@@ -12,6 +12,7 @@ interface IUpdateSubscriberSchema {
   newSymbol: string;
   newRollWindowInHours: number;
   checkIntervalInMinutes: number;
+  newCheckIntervalInMinutes: number;
 }
 
 interface IChangeSubscriberLastTrendSentSchema {
@@ -25,5 +26,6 @@ interface IDisableSubscriberSchema {
   identifier: string;
   symbol: string;
   rollWindowInHours: number;
+  checkIntervalInMinutes: number;
   shouldDelete: boolean;
 }

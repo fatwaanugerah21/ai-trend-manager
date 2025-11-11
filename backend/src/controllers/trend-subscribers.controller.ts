@@ -8,16 +8,18 @@ class TrendSubscribersController {
     const formattedSubscribers: Omit<ISubscriberDetail, "wsClient">[] = [];
 
     for (const symbol of Object.keys(subscribers)) {
-      for (const subscriberDetails of Object.values(subscribers[symbol])) {
-        const subs = subscriberDetails.map(({ wsClient, ...rest }) => rest);
-        formattedSubscribers.push(...subs);
+      for (const rollWindowInHour of Object.keys(subscribers[symbol])) {
+        for (const subscriberDetails of Object.values(subscribers[symbol][Number(rollWindowInHour + "")])) {
+          const subs = subscriberDetails.map(({ wsClient, ...rest }) => rest);
+          formattedSubscribers.push(...subs);
+        }
       }
     }
 
     return reply.send(formattedSubscribers);
   }
 
-  static async updateSubscriber(request: FastifyRequest, reply: FastifyReply): Promise<IPostResponse> {
+  static async updateSubscriber(request: FastifyRequest, reply: FastifyReply) {
     try {
       const data = request.body as IUpdateSubscriberSchema;
       const schema = joi.object<IUpdateSubscriberSchema>({
@@ -31,41 +33,19 @@ class TrendSubscribersController {
       const { error } = schema.validate(data);
       if (!!error) throw error.message;
 
+      console.log("Updating subscriber: ", data);
+
       const response = await TrendManager.updateSubscriber({
         identifier: data.identifier,
         oldSymbol: data.symbol,
         oldRollWindowInHours: data.rollWindowInHours,
-        newRollWindowInHours: data.newRollWindowInHours,
-        newSymbol: data.newSymbol,
-        checkIntervalInMinutes: data.checkIntervalInMinutes,
+        newRollWindowInHours: data.newRollWindowInHours || data.rollWindowInHours,
+        newSymbol: data.newSymbol || data.symbol,
+        oldCheckIntervalInMinutes: data.checkIntervalInMinutes,
+        newCheckIntervalInMinutes: data.newCheckIntervalInMinutes || data.checkIntervalInMinutes,
       });
 
-      return response
-    } catch (error) {
-      return { isSuccess: false, msg: error as string }
-    }
-  }
-
-  static async changeSubscriberLastTrendSent(request: FastifyRequest, reply: FastifyReply): Promise<IPostResponse> {
-    try {
-      const data = request.body as IChangeSubscriberLastTrendSentSchema;
-      const schema = joi.object<IChangeSubscriberLastTrendSentSchema>({
-        identifier: joi.string().required(),
-        rollWindowInHours: joi.number().required(),
-        symbol: joi.string().required(),
-        lastTrendSent: joi.date().required(),
-      });
-      const { error } = schema.validate(data);
-      if (!!error) throw error.message;
-
-      const response = await TrendManager.changeSubscriberLastTrendSent({
-        identifier: data.identifier,
-        symbol: data.symbol,
-        rollWindowInHours: data.rollWindowInHours,
-        newLastSent: data.lastTrendSent
-      });
-
-      return response;
+      reply.send(response);
     } catch (error) {
       return { isSuccess: false, msg: error as string }
     }
@@ -83,10 +63,10 @@ class TrendSubscribersController {
       const { error } = schema.validate(data);
       if (!!error) throw error.message;
 
-      const response = await TrendManager.disableSubscriber(data.symbol, data.rollWindowInHours, data.identifier, data.shouldDelete);
+      const response = await TrendManager.disableSubscriber(data.symbol, data.rollWindowInHours, data.checkIntervalInMinutes, data.identifier, data.shouldDelete);
       if (!response) throw "Subscriber not found";
 
-      return { isSuccess: true, msg: "Success" };
+      return reply.send({ isSuccess: true, msg: "Success" })
     } catch (error) {
       return { isSuccess: false, msg: error as string }
     }

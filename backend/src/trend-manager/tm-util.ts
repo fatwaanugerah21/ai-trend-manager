@@ -3,7 +3,7 @@ import ExchangeService from "@/services/exchange-service/exchange-service";
 import GrokAiService from "@/services/grok-ai.service";
 import eventBus from "@/utils/event-bus.util";
 import { generateImageOfCandles } from "@/utils/image-generator.util";
-import { breakOutTrend } from "db/schema";
+import { realtimeAiBreakoutTrend } from "db/schema";
 import { and, eq } from "drizzle-orm";
 
 class TMUtil {
@@ -20,28 +20,16 @@ class TMUtil {
     return curr_closestNextCheckInMinutes;
   }
 
-  static getWaitInMsForNextMinutes0Seconds(waitInMinutes: number) {
-    const now = new Date();
-
-    const nextIntervalCheckMinutes = new Date(now.getTime());
-    nextIntervalCheckMinutes.setSeconds(0, 0);
-
-    if (now.getSeconds() > 0 || now.getMilliseconds() > 0) nextIntervalCheckMinutes.setMinutes(now.getMinutes() + waitInMinutes);
-    const waitInMs = nextIntervalCheckMinutes.getTime() - now.getTime();
-
-    return waitInMs;
-  }
-
   static async saveTrendDataToDb(symbol: string, rollWindowInHours: number, candlesData: ICandlesData) {
     try {
       const isDataExist = await DatabaseService.db
-        .select({ id: breakOutTrend.id })
-        .from(breakOutTrend)
+        .select({ id: realtimeAiBreakoutTrend.id })
+        .from(realtimeAiBreakoutTrend)
         .where(and(
-          eq(breakOutTrend.symbol, symbol),
-          eq(breakOutTrend.rollWindowInHours, rollWindowInHours),
-          eq(breakOutTrend.endDate, candlesData.candlesEndDate as any),
-          eq(breakOutTrend.startDate, candlesData.candlesStartDate as any),
+          eq(realtimeAiBreakoutTrend.symbol, symbol),
+          eq(realtimeAiBreakoutTrend.rollWindowInHours, rollWindowInHours),
+          eq(realtimeAiBreakoutTrend.endDate, candlesData.candlesEndDate as any),
+          eq(realtimeAiBreakoutTrend.startDate, candlesData.candlesStartDate as any),
         ));
       if (!!isDataExist.length) {
         console.log("=================================================");
@@ -57,7 +45,7 @@ startDate: ${candlesData.candlesStartDate}
 
         return;
       }
-      await DatabaseService.db.insert(breakOutTrend).values({
+      await DatabaseService.db.insert(realtimeAiBreakoutTrend).values({
         symbol: symbol,
         closePrice: candlesData.closePrice.toString(),
         rollWindowInHours: rollWindowInHours,
@@ -88,70 +76,59 @@ startDate: ${candlesData.candlesStartDate}
   }
 
   static async waitForNextCheck(delayInMin: number) {
-    const waitInMs = TMUtil.getWaitInMsForNextMinutes0Seconds(delayInMin);
+    const now = new Date();
 
-    let timer: NodeJS.Timeout;
-    await new Promise(resolve => {
-      const triggeredTs = +new Date();
+    const nextIntervalCheckMinutes = new Date(now.getTime());
+    nextIntervalCheckMinutes.setSeconds(0, 0);
 
-      const onCheckTimer = (newWaitInMinutes: number) => {
-        const newWaitInMs = TMUtil.getWaitInMsForNextMinutes0Seconds(newWaitInMinutes);
+    if (now.getSeconds() > 0 || now.getMilliseconds() > 0) nextIntervalCheckMinutes.setMinutes(now.getMinutes() + delayInMin);
+    const waitInMs = nextIntervalCheckMinutes.getTime() - now.getTime();
 
-        console.log("newWaitInMs: ", newWaitInMs.toLocaleString());
-        const nowTs = +new Date();
-        const elapsed = nowTs - triggeredTs;
-        const restWaitInMs = waitInMs - elapsed;
-        console.log("restWaitInMs: ", restWaitInMs.toLocaleString());
-        if (newWaitInMs < restWaitInMs) {
-          const nextCheckDate = new Date(Date.now() + newWaitInMs);
-          console.log(`Updating wait ms to: ${newWaitInMs.toLocaleString()} (next check at ${nextCheckDate.toLocaleString()})`);
-
-          clearTimeout(timer);
-          timer = setTimeout(() => {
-            resolve(-1);
-            eventBus.off("check-timer", onCheckTimer);
-          }, newWaitInMs);
-        }
-      }
-
-      timer = setTimeout(() => {
-        resolve(-1);
-        eventBus.off("check-timer", onCheckTimer);
-      }, waitInMs);
-
-      eventBus.on("check-timer", onCheckTimer)
-    });
+    await new Promise(resolve => { setTimeout(resolve, waitInMs) });
   }
 
-  static logAllSubscribers(subscribers: { [symbol: string]: { [rollWindowInHours: number]: ISubscriberDetail[] } }) {
+  static logAllSubscribers(subscribers: TSubscriberCollection) {
     // Log all subscribers identifiers for every symbol and rollWindowInHours
-    const allSubsLog = Object.entries(subscribers).map(([sym, rollMap]) => {
-      return Object.entries(rollMap).map(([roll, subs]) => {
-        const ids = subs.map(sub => sub.identifier).join(", ");
-        return `symbol: ${sym}, rollWindowInHours: ${roll}, identifiers: [${ids}]`;
-      }).join("\n");
-    }).join("\n");
-    console.log("All trend subscribers by symbol and rollWindowInHours:\n" + allSubsLog);
+    console.log("All subscribers: ");
+
+    for (const [sym, rollMap] of Object.entries(subscribers)) {
+      for (const [roll, intervalMap] of Object.entries(rollMap)) {
+        for (const [checkIntervalInMinutes, subsArr] of Object.entries(intervalMap)) {
+          const ids = subsArr.map(sub => sub.identifier).join(", ");
+          console.log(
+            `- symbol: ${sym}, rollWindowInHours: ${roll}, checkIntervalInMinutes: ${checkIntervalInMinutes}, identifiers: [${ids}]`
+          );
+        }
+      }
+    }
   }
 
   static async getCandlesData(symbol: string, candlesEndDate: Date, rollWindowInHours: number): Promise<ICandlesData> {
     console.log(`Getting candles data for ${symbol}-${candlesEndDate}-${rollWindowInHours}H...`);
 
     const candlesStartDate = new Date(candlesEndDate.getTime() - (rollWindowInHours * 60 * 60 * 1000));
-    const candles = await ExchangeService.getCandles(symbol, candlesStartDate, candlesEndDate, "1Min");
+    // const candles = await ExchangeService.getCandles(symbol, candlesStartDate, candlesEndDate, "1Min");
 
-    const closePrice = candles[candles.length - 1]?.closePrice;
-    const candlesImage = await generateImageOfCandles(symbol, candles);
-    const candlesTrend = await GrokAiService.analyzeBreakOutTrend(candlesImage);
+    // const closePrice = candles[candles.length - 1]?.closePrice;
+    // const candlesImage = await generateImageOfCandles(symbol, candles);
+    // const candlesTrend = await GrokAiService.analyzeBreakOutTrend(candlesImage);
 
-    return { candlesStartDate, candlesEndDate, candlesImage, candlesTrend, closePrice };
+    // return { candlesStartDate, candlesEndDate, candlesImage, candlesTrend, closePrice };
+    // FIXME:
+    return { candlesStartDate, candlesEndDate, candlesImage: Buffer.from("asdca"), candlesTrend: "Down", closePrice: 2.43 };
   }
 
   static getMinutesPassedAndCheckIntervalElapsed(subscriber: ISubscriberDetail): number {
     const now = new Date();
     now.setSeconds(0, 0);
     const lastTrendSent = subscriber.lastTrendSent;
+    console.log("now: ", now);
+    console.log("lastTrendSent: ", lastTrendSent);
     const minutesPassed = Math.floor((now.getTime() - lastTrendSent.getTime()) / (60_000));
+
+    console.log("subscriber.checkIntervalInMinutes: ", subscriber.checkIntervalInMinutes);
+    console.log("minutesPassed: ", minutesPassed);
+
 
     return Math.max(subscriber.checkIntervalInMinutes - minutesPassed, 0);
   }

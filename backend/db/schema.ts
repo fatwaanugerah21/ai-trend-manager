@@ -184,3 +184,20 @@ export const priceTicker = mysqlTable("PriceTicker", {
 	index("PriceTicker_timestamp").on(table.timestamp),
 	primaryKey({ columns: [table.id], name: "PriceTicker_id"}),
 ]);
+
+export const realtimeAiBreakoutTrend = mysqlTable("RealtimeAiBreakoutTrend", {
+	id: int().autoincrement().notNull(),
+	symbol: varchar({ length: 256 }).notNull(),
+	trend: varchar({ length: 10 }).notNull(),
+	startDate: datetime({ mode: 'string'}).notNull(),
+	endDate: datetime({ mode: 'string'}).notNull(),
+	closePrice: varchar({ length: 256 }).notNull(),
+	rollWindowInHours: double().notNull(),
+},
+(table) => [
+	index("realtimeAiBreakoutTrend_endDate").on(table.endDate),
+	index("realtimeAiBreakoutTrend_rollWindowInHours").on(table.rollWindowInHours),
+	index("realtimeAiBreakoutTrend_startDate").on(table.startDate),
+	index("realtimeAiBreakoutTrend_symbol").on(table.symbol),
+	primaryKey({ columns: [table.id], name: "RealtimeAiBreakoutTrend_id"}),
+]);

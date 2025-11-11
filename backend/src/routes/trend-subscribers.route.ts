@@ -10,6 +10,7 @@ import joi from "joi"
 class TrendSubscriberRoute {
   static registerHttpRoutes(app: FastifyInstance) {
     app.get("/trend-subscribers", TrendSubscribersController.getAll);
+    app.put("/trend-subscribers", TrendSubscribersController.updateSubscriber);
   }
 
   static async handleWsMsg(connection: WebSocket, msg: IWSReceivedMsg) {
@@ -29,7 +30,7 @@ class TrendSubscriberRoute {
         const response = await TrendManager.addSubscriber(connection, data);
 
         connection.on("close", () => {
-          TrendManager.disableSubscriber(data.symbol, data.rollWindowInHours, data.identifier);
+          TrendManager.disableSubscriber(data.symbol, data.rollWindowInHours, data.checkIntervalInMinutes, data.identifier);
         });
 
         connection.send(JSON.stringify({
@@ -49,6 +50,7 @@ class TrendSubscriberRoute {
           symbol: joi.string().required(),
           newRollWindowInHours: joi.number(),
           newSymbol: joi.string(),
+          newCheckIntervalInMinutes: joi.number().required(),
         });
         const { error } = schema.validate(data);
         if (!!error) throw error.message;
@@ -59,40 +61,15 @@ class TrendSubscriberRoute {
           newSymbol: data.newSymbol || data.symbol,
           oldRollWindowInHours: data.rollWindowInHours,
           newRollWindowInHours: data.newRollWindowInHours || data.rollWindowInHours,
-          checkIntervalInMinutes: data.checkIntervalInMinutes,
+          oldCheckIntervalInMinutes: data.checkIntervalInMinutes,
+          newCheckIntervalInMinutes: data.newCheckIntervalInMinutes || data.checkIntervalInMinutes,
         });
 
-        if (data.newSymbol !== data.symbol || data.newRollWindowInHours !== data.rollWindowInHours) {
+        if (data.newSymbol !== data.symbol || data.newRollWindowInHours !== data.rollWindowInHours || data.newCheckIntervalInMinutes !== data.checkIntervalInMinutes) {
           connection.on("close", () => {
-            TrendManager.disableSubscriber(data.newSymbol, data.newRollWindowInHours, data.identifier);
+            TrendManager.disableSubscriber(data.newSymbol, data.newRollWindowInHours, data.newCheckIntervalInMinutes, data.identifier);
           })
         }
-
-        connection.send(JSON.stringify({
-          type: `${msg.type}-response`,
-          data: response,
-        }))
-      }
-
-      if (msg.type === "change-subscriber-last-trend-sent") {
-        const data = msg.data as IChangeSubscriberLastTrendSentSchema;
-        console.log("Update trend subscriber: ", data);
-
-        const schema = joi.object<IChangeSubscriberLastTrendSentSchema>({
-          identifier: joi.string().required(),
-          rollWindowInHours: joi.number().required(),
-          symbol: joi.string().required(),
-          lastTrendSent: joi.date().required(),
-        });
-        const { error } = schema.validate(data);
-        if (!!error) throw error.message;
-
-        const response = await TrendManager.changeSubscriberLastTrendSent({
-          identifier: data.identifier,
-          symbol: data.symbol,
-          rollWindowInHours: data.rollWindowInHours,
-          newLastSent: data.lastTrendSent
-        });
 
         connection.send(JSON.stringify({
           type: `${msg.type}-response`,
@@ -107,13 +84,14 @@ class TrendSubscriberRoute {
         const schema = joi.object<IDisableSubscriberSchema>({
           identifier: joi.string().required(),
           rollWindowInHours: joi.number().required(),
+          checkIntervalInMinutes: joi.number().required(),
           symbol: joi.string().required(),
           shouldDelete: joi.boolean().required(),
         });
         const { error } = schema.validate(data);
         if (!!error) throw error.message;
 
-        const response = await TrendManager.disableSubscriber(data.symbol, data.rollWindowInHours, data.identifier, data.shouldDelete);
+        const response = await TrendManager.disableSubscriber(data.symbol, data.rollWindowInHours, data.checkIntervalInMinutes, data.identifier, data.shouldDelete);
 
         connection.send(JSON.stringify({
           type: `${msg.type}-response`,
