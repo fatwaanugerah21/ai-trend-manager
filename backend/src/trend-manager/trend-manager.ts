@@ -28,7 +28,6 @@ class TrendManager {
     // e.g., for every 3 minutes: 00:00, 00:03, 00:06, etc.
     //       for every 2 minutes: 00:00, 00:02, 00:04, etc.
     const now = new Date();
-    now.setSeconds(0, 0); // strip seconds/millis
 
     let msToAlign = 0;
     const minute = now.getMinutes();
@@ -40,9 +39,10 @@ class TrendManager {
     if (mod !== 0) {
       // Next aligned minute mark
       const minutesToAdd = checkIntervalInMinutes - mod;
+      console.log("minutesToAdd: ", minutesToAdd);
 
       now.setMinutes(minute + minutesToAdd);
-      msToAlign = now.getTime() - (new Date()).setSeconds(0, 0);
+      msToAlign = TMUtil.getWaitMsToNextMinuteZeroSeconds(minutesToAdd);
 
       if (msToAlign > 0) {
         console.log(`Waiting for ${msToAlign}ms to align trend watcher loop for ${symbol} ${rollWindowInHours}h/${checkIntervalInMinutes}min to minute ${now.getMinutes().toString().padStart(2, "0")}`);

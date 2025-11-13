@@ -1,4 +1,3 @@
-// Modify this file to accomodate different running accounts
 module.exports = {
   apps: [
     {

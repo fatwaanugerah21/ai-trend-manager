@@ -75,8 +75,6 @@ Your job is NOT to speculate about the future, you only say what the image (the 
   }
 
   static async analyzeBreakOutTrend(image: Buffer): Promise<TAiCandleTrendDirection> {
-    console.log("apiKey: ", this.apiKey);
-
     try {
       const base64Image = image.toString('base64');
 

@@ -75,7 +75,7 @@ startDate: ${candlesData.candlesStartDate}
     } as ITMSendTrendMsg));
   }
 
-  static async waitForNextCheck(delayInMin: number) {
+  static getWaitMsToNextMinuteZeroSeconds(delayInMin: number) {
     const now = new Date();
 
     const nextIntervalCheckMinutes = new Date(now.getTime());
@@ -83,6 +83,12 @@ startDate: ${candlesData.candlesStartDate}
 
     if (now.getSeconds() > 0 || now.getMilliseconds() > 0) nextIntervalCheckMinutes.setMinutes(now.getMinutes() + delayInMin);
     const waitInMs = nextIntervalCheckMinutes.getTime() - now.getTime();
+
+    return waitInMs;
+  }
+
+  static async waitForNextCheck(delayInMin: number) {
+    const waitInMs = this.getWaitMsToNextMinuteZeroSeconds(delayInMin);
 
     await new Promise(resolve => { setTimeout(resolve, waitInMs) });
   }
